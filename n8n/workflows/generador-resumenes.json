@@ -1,0 +1,269 @@
+{
+  "name": "Generador de Resúmenes Ejecutivos",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "generar-resumen",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "e38c63d2-0c67-4771-a38c-37112676d94c",
+      "name": "Webhook - Recibir Documento",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        -32
+      ],
+      "webhookId": "9fa27663-b10f-435f-bbc5-0ec79f3ef05d"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://pdf-processor:8000/process",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "file"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "668ee672-e2e0-4ac6-8e11-96cdbdbfd101",
+      "name": "Extraer Texto del Documento",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -176,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "f55f17ae-8d01-484b-b383-c14e454bc653",
+      "name": "¿Extracción Exitosa?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        80,
+        -32
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const aiResponse = $input.first().json;\nconst extractedData = items[0].json || {};\n\n// Funzione per andare a capo dopo N caratteri\nfunction wrapText(text, maxLength = 80) {\n  if (!text) return text;\n  \n  const words = text.split(' ');\n  const lines = [];\n  let currentLine = '';\n  \n  words.forEach(word => {\n    if ((currentLine + word).length > maxLength) {\n      lines.push(currentLine.trim());\n      currentLine = word + ' ';\n    } else {\n      currentLine += word + ' ';\n    }\n  });\n  \n  if (currentLine.trim()) {\n    lines.push(currentLine.trim());\n  }\n  \n  return lines.join('\\n');\n}\n\n// Il testo è un JSON stringificato, dobbiamo fare il parse\nlet summary = \"No summary generated\";\ntry {\n  const textContent = aiResponse.candidates?.[0]?.content?.parts?.[0]?.text;\n  if (textContent) {\n    // Parse del JSON contenuto nel text\n    const parsedText = JSON.parse(textContent);\n    \n    // Caso 1: Se è un oggetto con campo \"resumen\"\n    if (parsedText.resumen) {\n      summary = wrapText(parsedText.resumen);\n    }\n    // Caso 2: Se è un array (come nel caso dell'articolo scientifico)\n    else if (Array.isArray(parsedText) && parsedText.length > 0) {\n      const doc = parsedText[0];\n      // Crea un riassunto combinando i campi principali\n      let summaryParts = [];\n      \n      if (doc.title) {\n        summaryParts.push(`**${doc.title}**\\n`);\n      }\n      if (doc.authors) {\n        summaryParts.push(`*Autores: ${doc.authors.join(', ')}*\\n`);\n      }\n      if (doc.abstract) {\n        summaryParts.push(wrapText(doc.abstract) + '\\n');\n      }\n      if (doc.conclusions) {\n        summaryParts.push(`**Conclusiones:**\\n${wrapText(doc.conclusions)}`);\n      }\n      \n      summary = summaryParts.join('\\n');\n    }\n    // Caso 3: Se è un oggetto generico\n    else if (typeof parsedText === 'object') {\n      const content = parsedText.abstract || parsedText.summary || \n                     parsedText.text || JSON.stringify(parsedText, null, 2);\n      summary = wrapText(content);\n    }\n  }\n} catch (e) {\n  // Se non è JSON, usa il testo direttamente\n  const rawText = aiResponse.candidates?.[0]?.content?.parts?.[0]?.text ?? \n                  \"No summary generated\";\n  summary = wrapText(rawText);\n}\n\n// Stats — se non esistono, valori di default\nconst stats = extractedData.stats || {};\nconst wordCount = stats.word_count ?? 0;\nconst charCount = stats.char_count ?? 0;\n\nconst output = {\n  success: true,\n  documento_original: {\n    nombre: extractedData.file_type ?? \"desconocido\",\n    palabras: wordCount,\n    caracteres: charCount\n  },\n  resumen_ejecutivo: summary,\n  metadata: {\n    fecha_generacion: new Date().toISOString(),\n    modelo_ia: aiResponse.modelVersion,\n    tokens_usados: aiResponse.usageMetadata\n  },\n  markdown: `# Resumen Ejecutivo\n\n${summary}\n\n---\n\n**Documento Original:** ${wordCount} palabras\n**Fecha:** ${new Date().toLocaleDateString('es-ES')}\n**Generado con:** Google Gemini (${aiResponse.modelVersion})`\n};\n\nreturn output;"
+      },
+      "id": "d0b83c19-2072-47f8-96b6-ddd9624038f1",
+      "name": "Formatear Respuesta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "fileName": "/data/output/resumen.pdf",
+        "options": {}
+      },
+      "id": "b0a5a775-7098-4327-b04e-bce656682840",
+      "name": "Guardar Resumen",
+      "type": "n8n-nodes-base.writeBinaryFile",
+      "typeVersion": 1,
+      "position": [
+        1024,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "f56d95e1-97d6-4a70-8b1c-8ce4fd3bf917",
+      "name": "Responder Éxito",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        -176
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": false, \"error\": $json.error || \"Error extrayendo texto del documento\" } }}",
+        "options": {}
+      },
+      "id": "88439a0b-efcb-4a8e-92b0-b261e0eb5a8c",
+      "name": "Responder Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        320,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-2.0-flash-lite",
+          "mode": "list"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=Genera un resumen profesional del siguiente documento:\n\n{{$json[\"text\"]}}"
+            }
+          ]
+        },
+        "simplify": false,
+        "jsonOutput": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1,
+      "position": [
+        256,
+        -176
+      ],
+      "id": "e662fc14-961e-4259-8fea-13957c878191",
+      "name": "Message a model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "kwzZFlmjqztWhBXJ",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Converti il markdown in file binario\nconst markdownContent = input.markdown || '';\nconst buffer = Buffer.from(markdownContent, 'utf-8');\n\nreturn {\n  json: input,\n  binary: {\n    data: {\n      data: buffer.toString('base64'),\n      mimeType: 'text/markdown',\n      fileName: `resumen_${new Date().toISOString().split('T')[0]}.md`,\n      fileExtension: 'md'\n    }\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        -176
+      ],
+      "id": "a84807ce-883a-4066-ae3b-83f598d2ed39",
+      "name": "Convertir"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook - Recibir Documento": {
+      "main": [
+        [
+          {
+            "node": "Extraer Texto del Documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Texto del Documento": {
+      "main": [
+        [
+          {
+            "node": "¿Extracción Exitosa?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Extracción Exitosa?": {
+      "main": [
+        [
+          {
+            "node": "Message a model1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Responder Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Respuesta": {
+      "main": [
+        [
+          {
+            "node": "Convertir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar Resumen": {
+      "main": [
+        [
+          {
+            "node": "Responder Éxito",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Message a model1": {
+      "main": [
+        [
+          {
+            "node": "Formatear Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convertir": {
+      "main": [
+        [
+          {
+            "node": "Guardar Resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "52e54847-45a7-46e6-8e7f-ae9993c9f235",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1079ca998ffd4f8186cb2eae122c9d1dc0f517a4bdbc97a16d4ea34e7e0b27c7"
+  },
+  "id": "rHmApTZKFt9d1F5o",
+  "tags": []
+}

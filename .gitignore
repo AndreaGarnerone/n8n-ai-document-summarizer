@@ -1,0 +1,44 @@
+# n8n
+n8n/credentials/*.json
+!n8n/credentials/credentials-template.json
+.n8n/
+
+# Docker
+docker-compose.override.yml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Datos sensibles
+.env
+*.key
+*.pem
+
+# Archivos temporales
+data/input/*
+!data/input/.gitkeep
+data/output/*
+!data/output/.gitkeep
+*.tmp
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentos de prueba (opcionales)
+data/examples/*.pdf
+data/examples/*.docx

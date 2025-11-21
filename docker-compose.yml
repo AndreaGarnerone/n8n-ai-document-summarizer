@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+
+  # n8n
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n-resumenes
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin123
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5678/
+      - GENERIC_TIMEZONE=America/Bogota
+    volumes:
+      - n8n_data:/home/node/.n8n
+      - ./n8n/workflows:/home/node/.n8n/workflows
+      - ./data:/data
+      - ./src:/scripts
+    networks:
+      - resumenes-network
+
+  # Procesador de PDFs - Python
+  pdf-processor:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    container_name: pdf-processor
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/data             # correcto
+      # - ./src:/app            #  borrar (rompe el contenedor)
+    environment:
+      - PYTHONUNBUFFERED=1
+    networks:
+      - resumenes-network
+    command: python api_server.py   # usa el API real
+
+volumes:
+  n8n_data:
+
+networks:
+  resumenes-network:
+    driver: bridge
