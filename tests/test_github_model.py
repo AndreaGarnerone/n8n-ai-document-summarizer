@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuración
-GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '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')
+GITHUB_TOKEN = os.getenv('GITHUB_TOKEN', '')
 API_URL = "https://models.inference.ai.azure.com/chat/completions"
 
 def test_github_models(text_sample):
